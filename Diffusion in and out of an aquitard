@@ -1,0 +1,346 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat May 13 11:40:11 2017
+
+@author: Hello
+Full Model including sorption and diffusion
+
+#inputs_model_full.txt  # PCE not included
+index Koc Mav_0_permil diffav_0_pm_10
+TCE 142.56075936021887 131.38822426592381 5.8695520505754194e-10
+DCE 74.81695005111546 96.943424265923809 6.8958077384620149e-10
+VC 39.26449353995999 62.498624265923809 8.7021893843665972e-10
+ETH 26.668586645214805 28.053824265923815 1.3304669012863884e-09
+Tracer 142.56075936021887 131.38822426592381 5.8695520505754194e-10
+
+#MW_abund_isotopologue.txt  # PCE included
+Index MW Abundance_0_pm Element CE Isotopologues
+Pce_c_ll 165.8108 0.977899 C pce Pce_c_ll
+Pce_c_lh 166.8108 0.021977 C pce Pce_c_lh
+Pce_c_hh 167.8108 0.000123 C pce Pce_c_hh
+Tce_c_ll 131.3660 0.977899 C tce Tce_c_ll
+Tce_c_lh 132.3660 0.021977 C tce Tce_c_lh
+Tce_c_hh 133.3660 0.000123 C tce Tce_c_hh
+Dce_c_ll 96.9212 0.977899 C dce Dce_c_ll
+Dce_c_lh 97.9212 0.021977 C dce Dce_c_lh
+Dce_c_hh 98.9212 0.000123 C dce Dce_c_hh
+Vc_c_ll 62.4764 0.977899 C vc Vc_c_ll
+Vc_c_lh 63.4764 0.021977 C vc Vc_c_lh
+Vc_c_hh 64.4764 0.000123 C vc Vc_c_hh
+Vc_cl_l 62.0457 0.757710 Cl vc Vc_cl_l
+Vc_cl_h 64.0457 0.242290 Cl vc Vc_cl_h
+Pce_llll 164.0220 0.329619 Cl pce Pce_llll
+Pce_hhhh 172.0220 0.003446 Cl pce Pce_hhhh
+Pce_lhhh 170.0220 0.043109 Cl pce Pce_lhhh
+Pce_llhh 168.0220 0.202222 Cl pce Pce_llhh
+Pce_lllh 166.0220 0.421604 Cl pce Pce_lllh
+Tce_lll 130.0299 0.435020 Cl tce Tce_lll
+Tce_hhh 136.0299 0.014223 Cl tce Tce_hhh
+Tce_llh 132.0299 0.139105 Cl tce Tce_llh
+Tce_lhl 132.0299 0.139105 Cl tce Tce_lhl
+Tce_hll 132.0299 0.139105 Cl tce Tce_hll
+Tce_lhh 134.0299 0.044481 Cl tce Tce_lhh
+Tce_hlh 134.0299 0.044481 Cl tce Tce_hlh
+Tce_hhl 134.0299 0.044481 Cl tce Tce_hhl
+Dce_ll 96.0378 0.574125 Cl dce Dce_ll
+Dce_lh 98.0378 0.367171 Cl dce Dce_lh
+Dce_hh 100.0378 0.058704 Cl dce Dce_hh
+Cl_l 35.0000 0.757710 Cl cl Cl_l
+Cl_h 37.0000 0.242290 Cl cl Cl_h
+Eth_c_ll 28.0316 0.977899 C eth Eth_c_ll
+Eth_c_lh 29.0316 0.021977 C eth Eth_c_lh
+Eth_c_hh 30.0316 0.000123 C eth Eth_c_hh
+
+@@@ necessary to adjust the number of sconc, df, sp etc: did not find a way to automatise this as set as kwargs 
+@@@ automatise kwargs?
+@@@ Possibility: Run the model twice = twoce as much time so no go. BUT copy and paste the files to another folder?
+In this case: run MODLFOW/MT3D then through cmd run PHT3D then open folder with model name,
+copy for x in ncomp MC3D files, PHT3D files description, close folders?
+
+TODO
+How to : copy and paste files
+HOW to run cmd from python
+"""
+import pandas as pd
+import os
+import numpy as np
+import datetime
+import Definition_functions as func
+import flopy
+
+now = datetime.datetime.now()
+modelname = 'A_sorp0'#'aS1D0'
+NOW = now.strftime('%Y_%m_%d_%H_%M')
+filename = modelname 
+# CHANGE exe file position
+mfexe = 'C:\\Program Files (x86)\\PM8\\modflow2005\\mf2005'
+mtexe = 'C:\\Program Files (x86)\\PM8\\mt3dms\\mt3dms5b'
+version = 'mt3dms'
+path_plot =  'D:\\0_Recent_files\\8_Model_flopy\\5_Model_final\\2_P3_Variations' 
+path_flopy = path_plot + '\\Results\\' + filename
+workspace = path_flopy
+if not os.path.exists(workspace):
+    os.makedirs(workspace)
+######################################################
+# DEFINE VARIABLES AND NAMES
+######################################################
+inputs = pd.read_csv(path_plot + '\\inputs_model_full.txt',delimiter = ' ', index_col = 0 , header = 0)
+MW_abund_isotopologue = pd.read_csv(path_plot + '\\MW_abund_isotopologue.txt',delimiter = ' ', index_col = 0 , header = 0)#xls.parse(worksheetname, index_col=0, na_values=['NaN'], usecols = [0,1,2], header = 1)
+C_pce_iso = ['Pce_c_ll', 'Pce_c_lh', 'Pce_c_hh'];C_tce_iso = [ 'Tce_c_ll', 'Tce_c_lh', 'Tce_c_hh'];C_dce_iso = ['Dce_c_ll', 'Dce_c_lh', 'Dce_c_hh'];C_vc_iso =  ['Vc_c_ll', 'Vc_c_lh', 'Vc_c_hh']
+C_eth_iso   =  ['Eth_c_ll', 'Eth_c_lh', 'Eth_c_hh']
+Cl_pce_iso = ['Pce_hhhh', 'Pce_lhhh', 'Pce_llhh', 'Pce_lllh','Pce_llll'];Cl_tce_iso = ['Tce_lll', 'Tce_hhh', 'Tce_llh', 'Tce_lhl', 'Tce_hll', 'Tce_lhh', 'Tce_hlh', 'Tce_hhl'];Cl_dce_iso = ['Dce_ll', 'Dce_lh', 'Dce_hh']
+Cl_vc_iso = ['Vc_cl_l', 'Vc_cl_h'];Cl_cl_iso = ['Cl_l', 'Cl_h']
+CE = ['tce','dce','vc','eth']
+#missing Dic?
+CE_iso = []
+kin = ['Tce_ci_ll_rd','Tce_ci_hl_rd','Tce_ci_hh_rd','Dce_ci_ll_rd','Dce_ci_hl_rd','Dce_ci_hh_rd','Vc_ci_ll_rd','Vc_ci_hl_rd','Vc_ci_hh_rd']# TO CONTINUE
+tracer = ['Tracer']
+#####################################################
+# SELECT CEs FOR MODEL
+# IF ADDING ONE SPECIE: check Rdoccurs sconc/C, btn ssm rct and disp files where you need to add info (sconc/sp1/df)
+#####################################################
+C_iso = [C_tce_iso,C_dce_iso,C_vc_iso, C_eth_iso]; Cl_iso = [Cl_tce_iso,Cl_dce_iso,Cl_vc_iso]
+tce_iso = [C_tce_iso,C_dce_iso,C_vc_iso,C_eth_iso,tracer]# ,Cl_tce_iso]
+for i,ce in enumerate(tce_iso):#+ Cl_iso):
+    for ciso in ce:
+        CE_iso.append(ciso)
+print CE_iso
+#####################################################
+mcomp = len(CE_iso) + 2 # All mcomp + pe + pH 
+ncomp = mcomp + len(kin) + 1 # All mcomp + all kinetics + Rdoccurs  
+#####################################################
+#set all isotopologue specific info
+#####################################################
+# for TCE/DCE/VC/ETH
+Mav_0_permil =   inputs['Mav_0_permil']   # Mass at 0 permil - average [131.38822426592381, 96.943424265923809, 62.498624265923809, 28.053824265923815]
+temp = 10
+diffav_0_pm_10 = inputs['diffav_0_pm_10'] # import Diffusion coefficient at 10 C per sec #[5.8695520505754194e-10, 6.8958077384620149e-10, 8.7021893843665972e-10, 1.3304669012863884e-09]
+Koc =            inputs['Koc']            # import Koc #[142.56075936021887, 74.81695005111546, 39.26449353995999, 26.668586645214805] #logKow = [2.4,1.9,1.4,1.1] xxxADD EQUATION# for info
+# fractionation relative to diff  TCE/DCE/VC/Eth
+BETA_C_DIFF = [0.029, 0.088, 0.088, 0.088] # Diffusion beta carbon
+#BETA_C_DIFF = [0.,0.,0.,0.] # Diffusion beta carbon
+BETA_CL_DIFF = [0.03 ,0.088, 0.088, 0.088]# Diffusion beta chlorine
+BETA_C_DIFF = [0.029, 0.029, 0.029, 0.029] # Diffusion beta carbon
+#BETA_C_DIFF = [0.,0.,0.,0.] # Diffusion beta carbon
+BETA_CL_DIFF = [0.03 ,0.088, 0.088, 0.088]# Diffusion beta chlorine
+#BETA_CL_DIFF = [0.,0.,0.,0.]# Diffusion beta chlorine
+# Fractionation for sorption coefficients # TCE/DCE/VC/ETH
+A_C_SORP = [0.5,0.5,0.5,0.5] #hKoc/lKoc Carbon
+#A_C_SORP = [0.,0.,0.,0.] #hKoc/lKoc Carbon
+#A_CL_SORP = [0.,0.,0.,0.,0.] #hKoc/lKoc Chlorine not yet in
+# Use definitions to get the diffusion and sorption coefficients for each isotopologues see # Definition_functions.py
+CE_C_koc, koc_C = func.set_koc(C_iso, A_C_SORP, Koc)
+# CE_Cl_koc, koc_Cl = func.set_koc(Cl_iso, A_CL_SORP, Koc) NOT CREATED YET
+CE_C_diff, diff_C = func.set_diff(C_iso,BETA_C_DIFF, diffav_0_pm_10, MW_abund_isotopologue )
+CE_Cl_diff, diff_Cl = func.set_diff(Cl_iso,BETA_CL_DIFF, diffav_0_pm_10, MW_abund_isotopologue )
+df_diff_C = pd.DataFrame(diff_C, index = CE_C_diff, columns = ['diff'])
+df_diff_Cl = pd.DataFrame(diff_Cl, index = CE_Cl_diff, columns = ['diff'])
+df_koc_C = pd.DataFrame(koc_C, index = CE_C_koc, columns = ['koc'])
+df_koc_C.loc['Tracer','koc'] = inputs.loc['Tracer','Koc']
+#data['R'] = foc_cl*data['koc']*rhob/porosity +1
+df_diff_C.loc['Tracer','diff'] = inputs.loc['Tracer','diffav_0_pm_10']*3600*24*365
+#####################################################
+# Initial concentration
+# Set all initial concentrations to 0
+conc_init = pd.DataFrame(np.zeros(len(CE_iso)), index = CE_iso, columns = ['conc_init'])
+conc0 = 4.4 # low conc = 0.001mM (9.7 mM just below TCE solubility) # For varying conc inputs
+conc_init.loc['Tce_c_ll', 'conc_init'] = round(0.978551533*conc0,7)#(0.9778992136*conc0,7) # 6 max number of decimals (look in btn files to adjust)
+conc_init.loc['Tce_c_lh', 'conc_init'] = round(0.021332208*conc0,7)#(0.0219773069*conc0,7)
+conc_init.loc['Tce_c_hh', 'conc_init'] = round(0.000116259*conc0,7)#(0.0001234795*conc0,7)
+conc_init.loc['Tracer', 'conc_init'] = round(conc0,2)#conc0,2)
+data = pd.concat([df_diff_C, df_diff_Cl])
+data = pd.concat([data,df_koc_C], axis = 1)
+#####################################################
+# Set model
+#####################################################
+# Info aquifer DIS
+Lx = 100.   #m 
+Ly = 10.   #m
+ztop = 0.  
+zbot = -50.
+nlay = 1
+#nrow def below
+ncol = 100
+# Thickness layers in meters
+th_y1 = 1 # Bottom sand layer
+th_cl = 1#1 # Clay layer
+th_pl = 2 #m thickness plume
+delc1= 0.05; th_small_disc1 = th_y1 + th_cl 
+delc2= 0.1; th_large_disc2 = th_pl + 1.5 
+delc3= 0.25; th_large_disc3 = Ly - th_small_disc1- th_large_disc2
+delc = np.hstack(((delc1*np.ones(th_small_disc1/delc1)),delc2*np.ones(th_large_disc2/delc2),delc3*np.ones(th_large_disc3/delc3)))#
+nrow = len(delc)
+delr = Lx/ncol
+delv = (ztop - zbot) / nlay
+botm = np.linspace(ztop, zbot, nlay + 1)
+# Model : clay layer between two aquifers
+nrowbott = int(nrow - th_y1/delc1)
+nrowtop = int(nrow - (th_y1 + th_cl)/delc1)
+#PLUME # 2 m thick plume above the clay layer
+#This model implies the plume bottom is at the surface of the aquitard
+nrow_pl_top  = int(nrow - (th_y1 + th_cl)/delc1 - (th_pl)/delc2)
+nrow_pl_bott = int(nrow - (th_y1 + th_cl)/delc1)
+npl_W = 2
+npl_E = 6
+
+# MODFLOW  # BEWARE EVERYTHING SHOULD BE SET WITH A DECIMAL OR JUST ".". Example "0. " and not "0"
+Vx = 43.8 # m/y velocity unit per year
+K_cl = 1. # per year
+K_sd = 3650. # per year
+rhob = 1.855
+porosity = 0.35
+al_cl = 0.01 # NOT YET USED
+al_sd = 1. 
+trpt = 0.0015
+trpv = 0.0015
+dmcoef = 0.  #m2/y
+foc_sd = 0.
+foc_cl = 0.0033
+#####################################################
+# VALUES WITH SPATIAL VARIATIONS
+# set head boundaries
+# Variables for the BAS package; set cells with constant hydraulic gradient
+ibound = np.ones((nlay, nrow, ncol))#, dtype=np.int32)
+ibound[:, :, 0] = -1
+ibound[:, :, -1] = -1
+# Hydraulic gradient
+hg = (porosity*Vx*Lx)/(K_sd)  # m head
+strt = np.ones((nlay, nrow, ncol))#, dtype=np.float32)
+strt = 10.*strt
+strt[:, :, 0] = 10.
+strt[:, :, -1] = 10. - hg  
+# Attribute coefficients to isotopologues*sconc = zeros
+#Set cells with fixed concentration # Plume position (above aquitard)
+icbund = np.ones((nlay, nrow, ncol))#, dtype=np.int32)
+icbund[:, :, 0] = -1
+# clay has different foc, al, K
+# foc array for LPF package #####################################################
+foc = np.ones((nlay, nrow, ncol), dtype=np.int32)
+foc = foc*foc_sd
+foc[:, nrowtop:nrowbott, :] = foc_cl
+# HK array for LPF package #####################################################
+hk = np.ones((nlay, nrow, ncol), dtype=np.int32)
+hk = hk*K_sd
+hk[:, nrowtop:nrowbott, :] = K_cl
+# Longitudinal disp #####################################################
+al = np.ones((nlay, nrow, ncol)) # no differentiation clay and sand for longitudinal disp
+al = al*al_sd
+al[:, nrowtop:nrowbott, :] = al_cl
+#Rdoccurs #####################################################
+Rd_yes = 1.; Rd_no = 0.001;
+Rdoccurs = np.ones((nlay, nrow, ncol)) # no differentiation clay and sand for longitudinal disp
+Rdoccurs = Rdoccurs*Rd_no
+Rdoccurs[:, nrowtop:nrowbott, :] = Rd_yes
+#Rdoccurs = Rd_no
+#Rdoccurs = Rd_yes
+
+#####################################################
+# Give to each coefficient a data
+#####################################################
+for i in np.arange(mcomp-2):  # Attribute concentrations sconc (BTN) and C (SSM package)
+    exec "sconc%s=0" % (i+1)
+    exec "C%s=%s" % (i+1,conc_init.loc[CE_iso[i],'conc_init'])
+for i,ce_iso in enumerate(CE_iso): # Attributes diff, Kd, and initial concentrations
+    exec "df%s=%s" % (i+1,data.loc[CE_iso[i],'diff']*porosity)#data.loc[CE_iso[i],'diff']*porosity)#data.loc['Tce_c_ll','diff']*porosity*3600*24*365)#data.loc[CE_iso[i],'diff']*porosity*3600*24*365)
+    exec "Koc%s=%s" %   (i+1,data.loc[CE_iso[i],'koc'])#data.loc[CE_iso[i],'koc'])#data.loc['Tce_c_ll','koc'])#data.loc[CE_iso[i],'koc'])
+#    exec "C%s=%s" %    (i+1,0)#data.loc[CE_iso[i],'conc_init'])
+    data.loc[ce_iso,'numb'] = i + 1
+for i,you_idiot in enumerate(np.ones(len(kin))):  # Attributes Cx (SSM package) of 1 for each kinetics. Not sure necessary
+    exec "C%s=%s" %     (i + mcomp +1 ,you_idiot) # =1 or =0? Doe sit matter at all?
+    exec "sconc%s=%s" % (i + mcomp +1 ,you_idiot)
+for i,extra_conc in enumerate([7,14]): # Attributes Cx (SSM package) for pH, pe, and Rdoccurs
+    exec "C%s=%s" %    (i+ len(CE_iso)+1, extra_conc) # =1 or =0? Doe sit matter at all?
+    exec "sconc%s=%s" % (i+ len(CE_iso)+1 , extra_conc)    
+# Manually change Rdoccurs #####################################################     Manually change Rdoccurs
+#C25 = -1 # number = ncomp
+sconc25  = Rdoccurs
+#####################################################
+Master_species = CE_iso
+for specie in ['pH','pe']:
+    Master_species.append(specie)
+for specie in kin:
+    Master_species.append(specie)
+Master_species.append('Rdoccurs')
+#Master_species.append('Napl')
+print Master_species
+#####################################################
+# TIME
+perlen = 40*[1]# lentgh stress period # number periods = nper = len(perlen)
+tsp= 0.02 # in year
+#perlen[0] = tsp
+nstp = list(np.array(perlen)/tsp) # number time steps / stress period
+# SSM : IMPORTANT : read carefully https://github.com/modflowpy/flopy/blob/develop/flopy/mt3d/mtssm.py
+ssm_data = {}
+#nr_idx = np.arange(nrow_pl_top , nrow_pl_bott)
+itype = flopy.mt3d.Mt3dSsm.itype_dict()
+
+s_d = 10# years
+ssm_data[0] = []
+ssm_data[s_d] = []
+for nr in np.arange(nrow_pl_top,nrow_pl_bott):
+        ssm_data[0].append((0,nr,0,0,itype['CC'],C1,C2,C3,0,0,0,0,0,0,0,0,0,C13,7,14,0,0,0,0,0,0,0,0,0,-1)) #itype['CC']
+for nr in np.arange(0,nrow_pl_top):
+        ssm_data[0].append((0,nr,0,0,itype['CC'],   0,0,0,0,0,0,0,0,0,0,0,0,0,7,14,0,0,0,0,0,0,0,0,0,-1)) #itype['CC']
+for nr in np.arange(nrow_pl_bott,0):
+        ssm_data[0].append((0,nr,0,0,itype['CC'],   0,0,0,0,0,0,0,0,0,0,0,0,0,7,14,0,0,0,0,0,0,0,0,0,-1)) #itype['CC']
+for nr in np.arange(nrow_pl_top,nrow_pl_bott):
+        ssm_data[s_d].append((0,nr,0,0,itype['CC'],   0,0,0,0,0,0,0,0,0,0,0,0,0,  7,14,0,0,0,0,0,0,0,0,0,-1)) #itype['CC']
+for nr in np.arange(0,nrow_pl_top):
+        ssm_data[s_d].append((0,nr,0,0,itype['CC'],   0,0,0,0,0,0,0,0,0,0,0,0,0,  7,14,0,0,0,0,0,0,0,0,0,-1)) #itype['CC']
+for nr in np.arange(nrow_pl_bott,0):
+        ssm_data[s_d].append((0,nr,0,0,itype['CC'],   0,0,0,0,0,0,0,0,0,0,0,0,0,  7,14,0,0,0,0,0,0,0,0,0,-1)) #itype['CC']
+#####################################################
+# PRINT OUT INFO
+func.save_text(path_plot,filename,NOW,CE_iso,data,Lx,Ly,delr,delc,Vx,hg,perlen,nlay,al_sd,al_cl,trpv,trpt,porosity,foc_cl,foc_sd,rhob,th_cl,th_pl,A_C_SORP,BETA_C_DIFF,BETA_CL_DIFF)
+func.save_text(workspace,filename,NOW,CE_iso,data,Lx,Ly,delr,delc,Vx,hg,perlen,nlay,al_sd,al_cl,trpv,trpt,porosity,foc_cl,foc_sd,rhob,th_cl,th_pl,A_C_SORP,BETA_C_DIFF,BETA_CL_DIFF)
+func.save_text(workspace,'description',NOW,CE_iso,data,Lx,Ly,delr,delc,Vx,hg,perlen,nlay,al_sd,al_cl,trpv,trpt,porosity,foc_cl,foc_sd,rhob,th_cl,th_pl,A_C_SORP,BETA_C_DIFF,BETA_CL_DIFF)
+#####################################################
+mf = flopy.modflow.Modflow(modelname, exe_name= mfexe, model_ws=workspace, laytyp=0)
+dis = flopy.modflow.ModflowDis(mf, nlay, nrow, ncol, nper = len(perlen),
+                               delr=delr, delc=delc,
+                               top=ztop, botm=botm[1:],
+                               perlen = perlen, nstp = nstp)
+bas = flopy.modflow.ModflowBas(mf, ibound=ibound, strt=strt)
+lpf = flopy.modflow.ModflowLpf(mf, hk=hk)
+oc = flopy.modflow.ModflowOc(mf)
+pcg = flopy.modflow.ModflowPcg(mf)
+lmt = flopy.modflow.mflmt.ModflowLmt(mf)
+#####################################################
+# Write the MODFLOW model input files
+mf.write_input()
+# Run the MODFLOW model
+mf.run_model()
+#####################################################
+mt = flopy.mt3d.Mt3dms(modelname, modflowmodel = mf, exe_name= mtexe, model_ws=workspace, version=version, ftlfilename= 'mt3d_link.ftl')#, ftlfree=True )# model_ws=workspace)#ftlfilename= 'mt3d_link.ftl' ,modflowmodel = mf,
+adv = flopy.mt3d.Mt3dAdv(mt,mixelm = -1)
+btn = flopy.mt3d.Mt3dBtn(mt, ncomp = ncomp, mcomp = mcomp,
+                         icbund = 1, sconc = 0, 
+                         prsity = porosity,
+                         sconc14 = sconc14,#pH
+                         sconc15 = sconc15,#pe
+                         sconc25 = sconc25 #Rdoccurs,
+                         )
+dsp = flopy.mt3d.Mt3dDsp(mt,  al = al_sd, 
+                         trpt = trpt, trpv = trpv,
+                         dmcoef = df1, multiDiff= True, dmcoef2 = df2, dmcoef3 = df3, dmcoef4 = df4,
+                         dmcoef5 = df5, dmcoef6 = df6, dmcoef7 = df7, dmcoef8 = df8, dmcoef9 = df9,
+                         dmcoef10 = df10, dmcoef11 = df11, dmcoef12 = df12, dmcoef13 = df13)#, dmcoef13 = df13, dmcoef14 = df14, dmcoef15 = df15, dmcoef16 = df16, dmcoef17 = df17, dmcoef18 = df18, dmcoef19 = df19, dmcoef20 = df20, dmcoef21 = df21, dmcoef22 = df22, dmcoef23 = df23, dmcoef24 = df24, dmcoef25 = df25)#, dmcoef26 = df26, dmcoef27 = df27)
+rct = flopy.mt3d.Mt3dRct(mt,
+                         isothm = 1,
+                         ireact = 0,
+                         igetsc = 0,
+                         rhob = rhob,
+                         sp1 = foc*Koc1, sp12 =foc*Koc2, sp13 =foc*Koc3, sp14 = foc*Koc4,
+                         sp15 = foc*Koc5, sp16 = foc*Koc6, sp17 = foc*Koc7, sp18 = foc*Koc8,
+                         sp19 = foc*Koc9, sp110 = foc*Koc10, sp111 = foc*Koc11, sp112 = foc*Koc12, sp113 = foc*Koc13)#, sp113 = foc*Koc13, sp114 = foc*Koc14, sp115 = foc*Koc15, sp116 = foc*Koc16, sp117 = foc*Koc17, sp118 = foc*Koc18, sp119 = foc*Koc19, sp120 = foc*Koc20, sp121 = foc*Koc21, sp122 = foc*Koc22, sp123 = foc*Koc23, sp124 = foc*Koc24, sp125 = foc*Koc25)#, sp126 = foc*Koc26, sp127 = foc*Koc27, sp128 = foc*Koc28, sp129 = foc*Koc29)
+ssm = flopy.mt3d.Mt3dSsm(mt, stress_period_data=ssm_data, mxss = 500)#, unitnumber) #stress_period_data=ssm_data
+gcg = flopy.mt3d.Mt3dGcg(mt)                      
+#####################################################
+# Write the MT3DMS/PHT3D model input files
+mt.write_input()
+# Run the MT3DMS model
+#mt.run_model()
+#####################################################
+y,x,z = dis.get_node_coordinates() # Get nodes
+func.save_for_plot(path_flopy,filename,now,CE_iso,Lx,Ly,delr,delc1,perlen,tsp,th_cl,th_pl,th_y1,nrow,ncol,x,y)
+
