@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat May 13 11:40:11 2017
-
+version pandas 0.17.1
+version numpy 1.13.1
+version matplotlib 1.5.1
 @author: Hello
 Full Model including sorption and diffusion
 
